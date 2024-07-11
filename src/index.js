@@ -1,3 +1,5 @@
+import DOCS from './help.html'
+
 addEventListener("fetch", (event) => {
   event.passThroughOnException();
   event.respondWith(handleRequest(event.request));
@@ -7,24 +9,24 @@ const dockerHub = "https://registry-1.docker.io";
 
 const routes = {
   // production
-  "docker.libcuda.so": dockerHub,
-  "quay.libcuda.so": "https://quay.io",
-  "gcr.libcuda.so": "https://gcr.io",
-  "k8s-gcr.libcuda.so": "https://k8s.gcr.io",
-  "k8s.libcuda.so": "https://registry.k8s.io",
-  "ghcr.libcuda.so": "https://ghcr.io",
-  "cloudsmith.libcuda.so": "https://docker.cloudsmith.io",
-  "ecr.libcuda.so": "https://public.ecr.aws",
+  "docker.tcops.top": dockerHub,
+  "quay.tcops.top": "https://quay.io",
+  "gcr.tcops.top": "https://gcr.io",
+  "k8s-gcr.tcops.top": "https://k8s.gcr.io",
+  "k8s.tcops.top": "https://registry.k8s.io",
+  "ghcr.tcops.top": "https://ghcr.io",
+  "cloudsmith.tcops.top": "https://docker.cloudsmith.io",
+  "ecr.tcops.top": "https://public.ecr.aws",
 
   // staging
-  "docker-staging.libcuda.so": dockerHub,
+  "docker-staging.tcops.top": dockerHub,
 };
 
 function routeByHosts(host) {
   if (host in routes) {
     return routes[host];
   }
-  if (MODE == "debug") {
+  if (MODE === "debug") {
     return TARGET_UPSTREAM;
   }
   return "";
@@ -43,9 +45,9 @@ async function handleRequest(request) {
       }
     );
   }
-  const isDockerHub = upstream == dockerHub;
+  const isDockerHub = upstream === dockerHub;
   const authorization = request.headers.get("Authorization");
-  if (url.pathname == "/v2/") {
+  if (url.pathname === "/v2/") {
     const newUrl = new URL(upstream + "/v2/");
     const headers = new Headers();
     if (authorization) {
@@ -58,7 +60,7 @@ async function handleRequest(request) {
       redirect: "follow",
     });
     if (resp.status === 401) {
-      if (MODE == "debug") {
+      if (MODE === "debug") {
         headers.set(
           "Www-Authenticate",
           `Bearer realm="http://${url.host}/v2/auth",service="cloudflare-docker-proxy"`
@@ -78,7 +80,7 @@ async function handleRequest(request) {
     }
   }
   // get token
-  if (url.pathname == "/v2/auth") {
+  if (url.pathname === "/v2/auth") {
     const newUrl = new URL(upstream + "/v2/");
     const resp = await fetch(newUrl.toString(), {
       method: "GET",
@@ -97,18 +99,27 @@ async function handleRequest(request) {
     // Example: repository:busybox:pull => repository:library/busybox:pull
     if (scope && isDockerHub) {
       let scopeParts = scope.split(":");
-      if (scopeParts.length == 3 && !scopeParts[1].includes("/")) {
+      if (scopeParts.length === 3 && !scopeParts[1].includes("/")) {
         scopeParts[1] = "library/" + scopeParts[1];
         scope = scopeParts.join(":");
       }
     }
     return await fetchToken(wwwAuthenticate, scope, authorization);
   }
+  // return docs
+  if (url.pathname === "/") {
+    return new Response(DOCS, {
+      status: 200,
+      headers: {
+        "content-type": "text/html"
+      }
+    });
+  }
   // redirect for DockerHub library images
   // Example: /v2/busybox/manifests/latest => /v2/library/busybox/manifests/latest
   if (isDockerHub) {
     const pathParts = url.pathname.split("/");
-    if (pathParts.length == 5) {
+    if (pathParts.length === 5) {
       pathParts.splice(2, 0, "library");
       const redirectUrl = new URL(url);
       redirectUrl.pathname = pathParts.join("/");
